@@ -1,0 +1,6 @@
+{
+  "name": "WeddingVault",
+  "description": "예비부부가 웨딩 계약 업체 정보, 금액, 잔금 일정, 계약 내용을 한 곳에서 함께 관리하는 결혼 준비 커플 관리 대시보드",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

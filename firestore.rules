@@ -1,0 +1,144 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 1. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Standard helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isEmailVerified() {
+      return request.auth.token.email_verified == true;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Helper to get user's couple_id from their profile
+    function getUserCoupleId() {
+      return get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.couple_id;
+    }
+
+    // Helper to check if user belongs to a specific couple
+    function isUserInCouple(coupleId) {
+      return exists(/databases/$(database)/documents/couples/$(coupleId)) && (
+        get(/databases/$(database)/documents/couples/$(coupleId)).data.partner1_id == request.auth.uid ||
+        get(/databases/$(database)/documents/couples/$(coupleId)).data.partner2_id == request.auth.uid
+      );
+    }
+
+    // 2. Couples rules
+    match /couples/{coupleId} {
+      // Allow single document get if user is one of the partners
+      allow get: if isSignedIn() && resource != null && (
+        resource.data.partner1_id == request.auth.uid || 
+        resource.data.partner2_id == request.auth.uid
+      );
+      
+      // Allow list queries if user is standard partner, or searching for an available open invite code
+      allow list: if isSignedIn() && (
+        resource.data.partner1_id == request.auth.uid || 
+        resource.data.partner2_id == request.auth.uid ||
+        (resource.data.invite_code != null && resource.data.partner2_id == null)
+      );
+
+      allow create: if isSignedIn() && 
+        incoming().keys().hasAll(['invite_code', 'partner1_id', 'partner2_id', 'created_at']) &&
+        incoming().keys().size() == 4 &&
+        incoming().partner1_id == request.auth.uid &&
+        incoming().partner2_id == null &&
+        incoming().invite_code is string && 
+        incoming().invite_code.size() == 6 &&
+        incoming().created_at == request.time;
+
+      allow update: if isSignedIn() && (
+        // Action: Join a couple using invite code
+        (
+          existing().partner2_id == null && 
+          incoming().partner2_id == request.auth.uid &&
+          incoming().partner1_id == existing().partner1_id &&
+          incoming().invite_code == existing().invite_code &&
+          incoming().created_at == existing().created_at &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['partner2_id'])
+        )
+      );
+    }
+
+    // 3. Profiles rules
+    match /profiles/{userId} {
+      allow read: if isSignedIn() && (
+        request.auth.uid == userId ||
+        (resource != null && isUserInCouple(resource.data.couple_id))
+      );
+
+      allow create: if isSignedIn() && request.auth.uid == userId &&
+        incoming().keys().hasAll(['name', 'couple_id', 'created_at']) &&
+        incoming().keys().size() == 3 &&
+        incoming().couple_id is string &&
+        incoming().couple_id.size() <= 128 &&
+        incoming().name is string &&
+        incoming().name.size() <= 100 &&
+        incoming().created_at == request.time;
+
+      allow update: if isSignedIn() && request.auth.uid == userId &&
+        incoming().couple_id == existing().couple_id &&
+        incoming().created_at == existing().created_at &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['name']) &&
+        incoming().name is string &&
+        incoming().name.size() <= 100;
+    }
+
+    // 4. Contracts rules
+    match /contracts/{contractId} {
+      allow read, list: if isSignedIn() && 
+        isUserInCouple(resource.data.couple_id);
+
+      allow create: if isSignedIn() && 
+        isUserInCouple(incoming().couple_id) &&
+        incoming().keys().hasAll([
+          'couple_id', 'vendor_name', 'category', 'contract_date', 'event_date', 
+          'total_amount', 'paid_amount', 'balance_due_date', 'manager_name', 
+          'manager_phone', 'status', 'memo', 'details', 'last_edited_by', 
+          'updated_at', 'created_at'
+        ]) &&
+        incoming().vendor_name is string && incoming().vendor_name.size() <= 200 &&
+        incoming().category is string && incoming().category.size() <= 50 &&
+        incoming().total_amount is int && incoming().total_amount >= 0 &&
+        incoming().paid_amount is int && incoming().paid_amount >= 0 &&
+        incoming().status in ['계약완료', '잔금대기', '잔금완료', '취소'] &&
+        incoming().details is list &&
+        incoming().last_edited_by == request.auth.uid &&
+        incoming().created_at == request.time &&
+        incoming().updated_at == request.time;
+
+      allow update: if isSignedIn() && 
+        isUserInCouple(existing().couple_id) &&
+        isUserInCouple(incoming().couple_id) &&
+        incoming().created_at == existing().created_at &&
+        incoming().vendor_name is string && incoming().vendor_name.size() <= 200 &&
+        incoming().category is string && incoming().category.size() <= 50 &&
+        incoming().total_amount is int && incoming().total_amount >= 0 &&
+        incoming().paid_amount is int && incoming().paid_amount >= 0 &&
+        incoming().status in ['계약완료', '잔금대기', '잔금완료', '취소'] &&
+        incoming().details is list &&
+        incoming().last_edited_by == request.auth.uid &&
+        incoming().updated_at == request.time;
+
+      allow delete: if isSignedIn() && 
+        isUserInCouple(existing().couple_id);
+    }
+  }
+}

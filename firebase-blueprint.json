@@ -1,0 +1,68 @@
+{
+  "entities": {
+    "Couple": {
+      "title": "Couple",
+      "description": "Represents a linked pair of users sharing wedding planning data.",
+      "type": "object",
+      "properties": {
+        "invite_code": { "type": "string" },
+        "partner1_id": { "type": "string" },
+        "partner2_id": { "type": "string" },
+        "created_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["invite_code", "partner1_id", "created_at"]
+    },
+    "Profile": {
+      "title": "Profile",
+      "description": "Represents a user profile linked to a couple.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "couple_id": { "type": "string" },
+        "created_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["couple_id", "created_at"]
+    },
+    "Contract": {
+      "title": "Contract",
+      "description": "Represents a booking/contract with a wedding vendor.",
+      "type": "object",
+      "properties": {
+        "couple_id": { "type": "string" },
+        "vendor_name": { "type": "string" },
+        "category": { "type": "string" },
+        "contract_date": { "type": "string", "format": "date" },
+        "event_date": { "type": "string", "format": "date" },
+        "total_amount": { "type": "integer" },
+        "paid_amount": { "type": "integer" },
+        "balance_due_date": { "type": "string", "format": "date" },
+        "manager_name": { "type": "string" },
+        "manager_phone": { "type": "string" },
+        "status": { "type": "string", "enum": ["계약완료", "잔금대기", "잔금완료", "취소"] },
+        "memo": { "type": "string" },
+        "details": {
+          "type": "array",
+          "items": { "type": "object" }
+        },
+        "last_edited_by": { "type": "string" },
+        "updated_at": { "type": "string", "format": "date-time" },
+        "created_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["couple_id", "vendor_name", "category", "created_at"]
+    }
+  },
+  "firestore": {
+    "/couples/{coupleId}": {
+      "schema": "Couple",
+      "description": "Collection of couples, used for sharing data."
+    },
+    "/profiles/{userId}": {
+      "schema": "Profile",
+      "description": "Collection of user profiles, linked to a couple."
+    },
+    "/contracts/{contractId}": {
+      "schema": "Contract",
+      "description": "Collection of wedding vendor contracts managed by couples."
+    }
+  }
+}
