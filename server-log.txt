@@ -1,0 +1,2 @@
+[2026-06-10T07:12:15.412Z] [HTTP Request] GET /api/health
+[2026-06-10T07:12:15.413Z] Handling GET /api/health check

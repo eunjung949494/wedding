@@ -29,6 +29,12 @@ app.use((req, res, next) => {
   next();
 });
 
+// Simple GET endpoint for health inspection
+app.get("/api/health", (req, res) => {
+  logTrace("Handling GET /api/health check");
+  res.json({ status: "healthy", timestamp: new Date().toISOString() });
+});
+
 // 1. Initialize Gemini client if API key is present
 const geminiApiKey = process.env.GEMINI_API_KEY;
 
@@ -86,9 +92,16 @@ async function generateContentWithRetry(
 }
 
 // 2. Add WeddingVault Contract Analyzer endpoint
+import * as fs from "fs";
 function logTrace(msg: string) {
   const timestamp = new Date().toISOString();
+  const logMsg = `[${timestamp}] ${msg}\n`;
   console.log(`[${timestamp}] ${msg}`);
+  try {
+    fs.appendFileSync(path.join(process.cwd(), "server-log.txt"), logMsg);
+  } catch (err) {
+    // Ignore log write errors
+  }
 }
 
 function getCleanMimeType(fileName: string, multerMimeType: string): string {
