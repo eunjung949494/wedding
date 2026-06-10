@@ -1,8 +1,65 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    
+    // Default-deny gate
     match /{document=**} {
-      allow read, write: if true;
+      allow read, write: if false;
+    }
+
+    // Helper to validate generic string ID formats (supports Alphanumeric and Korean/Japanese characters)
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-ㄱ-ㅎㅏ-ㅣ가-힣]+$');
+    }
+
+    // 1. Couples collection rules
+    match /couples/{coupleId} {
+      allow get: if isValidId(coupleId);
+      allow create: if isValidId(coupleId)
+                    && request.resource.data.keys().hasAll(['invite_code', 'partner1_id', 'password', 'created_at'])
+                    && request.resource.data.invite_code is string
+                    && request.resource.data.invite_code.size() == 6
+                    && request.resource.data.password is string
+                    && request.resource.data.password.size() >= 4
+                    && request.resource.data.password.size() <= 100;
+      allow update: if isValidId(coupleId)
+                    && request.resource.data.password == resource.data.password
+                    && request.resource.data.created_at == resource.data.created_at
+                    && request.resource.data.invite_code == resource.data.invite_code;
+    }
+
+    // 2. User Profiles collection rules
+    match /profiles/{userId} {
+      allow get: if isValidId(userId);
+      allow create: if isValidId(userId)
+                    && request.resource.data.keys().hasAll(['name', 'couple_id', 'created_at'])
+                    && request.resource.data.name is string
+                    && request.resource.data.name.size() <= 100
+                    && request.resource.data.couple_id is string;
+      allow update: if isValidId(userId)
+                    && request.resource.data.couple_id == resource.data.couple_id;
+    }
+
+    // 3. Wedding Vendor Contracts collection rules
+    match /contracts/{contractId} {
+      allow read: if isValidId(contractId);
+      allow create: if isValidId(contractId)
+                    && request.resource.data.keys().hasAll(['couple_id', 'vendor_name', 'category', 'created_at'])
+                    && request.resource.data.vendor_name is string
+                    && request.resource.data.vendor_name.size() <= 100
+                    && request.resource.data.category in ['본식스냅', '웨딩영상', '드레스', '헤어메이크업', '예식장/홀', '한복', '부케/플라워', '신혼여행', '기타']
+                    && request.resource.data.total_amount is int
+                    && request.resource.data.total_amount >= 0
+                    && request.resource.data.paid_amount is int
+                    && request.resource.data.paid_amount >= 0;
+      allow update: if isValidId(contractId)
+                    && request.resource.data.category in ['본식스냅', '웨딩영상', '드레스', '헤어메이크업', '예식장/홀', '한복', '부케/플라워', '신혼여행', '기타']
+                    && request.resource.data.total_amount is int
+                    && request.resource.data.total_amount >= 0
+                    && request.resource.data.paid_amount is int
+                    && request.resource.data.paid_amount >= 0
+                    && request.resource.data.couple_id == resource.data.couple_id;
+      allow delete: if isValidId(contractId);
     }
   }
 }

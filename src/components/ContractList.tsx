@@ -798,8 +798,10 @@ export default function ContractList({ contracts, selectedContract, onOpenContra
                     {selectedContract.updated_at && (
                       <div className="text-[9px] text-slate-300 text-right">
                         최종 수정 시간: {
-                          selectedContract.updated_at.toDate 
-                            ? selectedContract.updated_at.toDate().toLocaleString() 
+                          typeof selectedContract.updated_at.toDate === "function"
+                            ? selectedContract.updated_at.toDate().toLocaleString()
+                            : selectedContract.updated_at.seconds
+                            ? new Date(selectedContract.updated_at.seconds * 1000).toLocaleString()
                             : new Date(selectedContract.updated_at).toLocaleString()
                         }
                       </div>
