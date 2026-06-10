@@ -121,23 +121,34 @@ app.post("/api/analyze-contract", upload.single("file"), async (req, res) => {
 
     const response = await generateContentWithRetry(
       ai,
-      [
-        {
-          inlineData: {
-            mimeType: mimeType,
-            data: base64Data,
+      {
+        parts: [
+          {
+            inlineData: {
+              mimeType: mimeType,
+              data: base64Data,
+            },
           },
-        },
-        {
-          text: systemPrompt,
-        },
-      ],
+          {
+            text: systemPrompt,
+          },
+        ],
+      },
       {
         responseMimeType: "application/json",
       }
     );
 
-    const textOutput = response.text || "{}";
+    let textOutput = response.text || "{}";
+    
+    // Safety check: clean up markdown json blocks if returned by the model
+    if (textOutput.trim().startsWith("```")) {
+      textOutput = textOutput
+        .replace(/^```json\s*/i, "")
+        .replace(/```$/, "")
+        .trim();
+    }
+    
     const parsedData = JSON.parse(textOutput);
 
     return res.json(parsedData);
