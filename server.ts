@@ -85,6 +85,40 @@ function logTrace(msg: string) {
   console.log(`[${timestamp}] ${msg}`);
 }
 
+function getCleanMimeType(fileName: string, multerMimeType: string): string {
+  const ext = path.extname(fileName).toLowerCase();
+  
+  // Explicitly map based on file extension to ensure we provide a standard supported MIME type for Gemini
+  switch (ext) {
+    case ".pdf":
+      return "application/pdf";
+    case ".png":
+      return "image/png";
+    case ".jpg":
+    case ".jpeg":
+      return "image/jpeg";
+    case ".webp":
+      return "image/webp";
+    case ".heic":
+      return "image/heic";
+    case ".heif":
+      return "image/heif";
+    case ".gif":
+      return "image/gif";
+    case ".txt":
+      return "text/plain";
+    case ".html":
+    case ".htm":
+      return "text/html";
+    default:
+      // Fallback: if multer mimeType is not application/octet-stream nor empty, use it
+      if (multerMimeType && multerMimeType !== "application/octet-stream") {
+        return multerMimeType;
+      }
+      return "image/jpeg"; // Default safe fallback for images
+  }
+}
+
 app.post("/api/analyze-contract", upload.single("file"), async (req, res) => {
   logTrace("Received request on /api/analyze-contract");
   try {
@@ -100,9 +134,9 @@ app.post("/api/analyze-contract", upload.single("file"), async (req, res) => {
       return res.status(400).json({ error: "No file was uploaded." });
     }
 
-    const mimeType = req.file.mimetype;
+    const mimeType = getCleanMimeType(req.file.originalname, req.file.mimetype);
     const base64Data = req.file.buffer.toString("base64");
-    logTrace(`File uploaded: name=${req.file.originalname}, size=${req.file.size}, mimeType=${mimeType}`);
+    logTrace(`File uploaded: name=${req.file.originalname}, size=${req.file.size}, finalMimeType=${mimeType} (original=${req.file.mimetype})`);
 
     const systemPrompt = `결혼 준비 계약서 이미지 또는 PDF입니다. 이 문서에서 관련 업체의 상세 정보를 완벽하게 분석하여 파싱하십시오.
 결과물은 반드시 다음의 JSON 스키마를 만족하는 구조화된 JSON 데이터여야 합니다. 다른 불필요한 마크다운, 부가 설명 없이 오직 이 순수 JSON 데이터만 반환하세요:
@@ -173,6 +207,16 @@ app.post("/api/analyze-contract", upload.single("file"), async (req, res) => {
       details: error?.message || String(error),
     });
   }
+});
+
+// Global error handler middleware to catch any Multer or other unhandled exceptions
+app.use((err: any, req: any, res: any, next: any) => {
+  logTrace(`[Global Express Error] Caught error: ${err?.message || String(err)}`);
+  console.error("Global Express Error:", err);
+  res.status(err.status || err.statusCode || 500).json({
+    error: err.message || "서버 내부 오류가 발생했습니다.",
+    details: err.stack || String(err),
+  });
 });
 
 // Serve Vite or static frontend build path

@@ -67,16 +67,23 @@ export default function ContractForm({ coupleId, uid, onSuccess }: ContractFormP
       });
 
       let resJson: any = null;
+      let rawText = "";
       try {
-        resJson = await response.json();
+        rawText = await response.text();
+        if (rawText) {
+          resJson = JSON.parse(rawText);
+        }
       } catch (err) {
         if (!response.ok) {
-          throw new Error("서버와의 분석 통신에 실패했습니다. (서버 응답을 해석할 수 없습니다)");
+          const displaySnippet = rawText 
+            ? (rawText.length > 150 ? rawText.substring(0, 150) + "..." : rawText) 
+            : "서버가 빈 응답을 반환했습니다.";
+          throw new Error(`서버 통신 실패 (상태 코드: ${response.status}). 상세 정보: ${displaySnippet}`);
         }
       }
 
       if (!response.ok) {
-        const errMsg = resJson?.error || resJson?.details || "서버 내부 오류";
+        const errMsg = resJson?.error || resJson?.details || "서버 내부 오류가 발생했습니다.";
         throw new Error(`계약서 분석 실패: ${errMsg}`);
       }
 
