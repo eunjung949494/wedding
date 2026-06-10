@@ -259,4 +259,9 @@ async function startServer() {
   });
 }
 
-startServer();
+// Only start the server if not imported by Vercel serverless (or when running directly)
+if (process.env.NODE_ENV !== "production" || (!process.env.VERCEL && !process.env.NOW_BUILDER)) {
+  startServer();
+}
+
+export default app;
