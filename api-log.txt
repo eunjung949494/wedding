@@ -1,0 +1,20 @@
+[2026-06-10T06:11:52.484Z] Received request on /api/analyze-contract
+[2026-06-10T06:11:52.485Z] File uploaded: name=sample.png, size=70, mimeType=image/png
+[2026-06-10T06:11:52.485Z] Sending request to generateContentWithRetry...
+[2026-06-10T06:11:52.485Z] [Gemini API] Attempting contract analysis using gemini-3.5-flash (Attempt 1/3)...
+[2026-06-10T06:11:56.806Z] [Gemini API] Success using gemini-3.5-flash
+[2026-06-10T06:11:56.806Z] Received response from generateContentWithRetry
+[2026-06-10T06:11:56.807Z] Raw response text: {
+  "vendor_name": "",
+  "category": "기타",
+  "contract_date": null,
+  "event_date": null,
+  "total_amount": 0,
+  "paid_amount": 0,
+  "balance_due_date": null,
+  "manager_name": null,
+  "manager_phone": null,
+  "memo": "제공된 이미지가 유효한 계약서 양식이 아니거나 텍스트를 식별할 수 없습니다.",
+  "details": []
+}
+[2026-06-10T06:11:56.807Z] Successfully parsed text into JSON. Sending success response.
