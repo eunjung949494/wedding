@@ -23,6 +23,12 @@ const upload = multer({
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
 
+// Globals Logging Middleware
+app.use((req, res, next) => {
+  logTrace(`[HTTP Request] ${req.method} ${req.url}`);
+  next();
+});
+
 // 1. Initialize Gemini client if API key is present
 const geminiApiKey = process.env.GEMINI_API_KEY;
 
@@ -119,8 +125,8 @@ function getCleanMimeType(fileName: string, multerMimeType: string): string {
   }
 }
 
-app.post("/api/analyze-contract", upload.single("file"), async (req, res) => {
-  logTrace("Received request on /api/analyze-contract");
+app.post(["/api/analyze-contract", "/api/analyze-contract/"], upload.single("file"), async (req, res) => {
+  logTrace(`Received request on ${req.originalUrl || req.url}`);
   try {
     if (!ai) {
       logTrace("Error: ai client is null");
