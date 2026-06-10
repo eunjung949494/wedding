@@ -56,11 +56,11 @@ async function generateContentWithRetry(
   contents: any,
   config: any
 ) {
-  const modelsToTry = ["gemini-3.5-flash", "gemini-3.1-flash-lite", "gemini-flash-latest"];
+  const modelsToTry = ["gemini-3.1-flash-lite", "gemini-3.5-flash", "gemini-flash-latest"];
   let lastError: any = null;
 
   for (const modelName of modelsToTry) {
-    let attempts = 3;
+    let attempts = 2; // Reduce to 2 attempts per model to failover faster to fallback models
     let delay = 1000; // 1 second base delay
 
     for (let attempt = 1; attempt <= attempts; attempt++) {

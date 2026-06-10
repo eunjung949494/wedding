@@ -8,7 +8,7 @@ import Dashboard from "./components/Dashboard";
 import ContractList from "./components/ContractList";
 import ContractForm from "./components/ContractForm";
 import { 
-  Heart, Home, FileText, PlusCircle, LogOut, HeartHandshake, Loader2 
+  Heart, Home, FileText, PlusCircle, LogOut, HeartHandshake, Loader2, AlertTriangle 
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
@@ -25,6 +25,7 @@ export default function App() {
   
   // Direct details sheet selection
   const [selectedContract, setSelectedContract] = useState<Contract | null>(null);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   // Sync personal nickname on user change
   useEffect(() => {
@@ -161,17 +162,20 @@ export default function App() {
   };
 
   const handleSignOut = () => {
-    if (confirm("웨딩볼트에서 로그아웃 하시겠습니까?")) {
-      localStorage.removeItem("wedding_custom_user");
-      localStorage.removeItem("wedding_couple_id");
-      localStorage.removeItem("wedding_user_nickname");
-      localStorage.removeItem("wedding_vault_pwd");
-      setUser(null);
-      setCoupleId(null);
-      setProfileName("");
-      setPersonalName("");
-      setContracts([]);
-    }
+    setShowLogoutConfirm(true);
+  };
+
+  const confirmSignOut = () => {
+    localStorage.removeItem("wedding_custom_user");
+    localStorage.removeItem("wedding_couple_id");
+    localStorage.removeItem("wedding_user_nickname");
+    localStorage.removeItem("wedding_vault_pwd");
+    setUser(null);
+    setCoupleId(null);
+    setProfileName("");
+    setPersonalName("");
+    setContracts([]);
+    setShowLogoutConfirm(false);
   };
 
   const handleOpenDetailedContract = (c: Contract | null) => {
@@ -470,6 +474,53 @@ export default function App() {
           </main>
         </div>
       </div>
+
+      {/* 4. Beautiful custom Logout Modal Overlay */}
+      <AnimatePresence>
+        {showLogoutConfirm && (
+          <>
+            {/* Backdrop */}
+            <motion.div
+              onClick={() => setShowLogoutConfirm(false)}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 0.5 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-black z-[100]"
+            />
+            
+            {/* Confirmation Alert Box */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              transition={{ type: "spring", damping: 25, stiffness: 350 }}
+              className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[310px] bg-white rounded-3xl p-6 shadow-2xl border border-slate-100 z-[110] text-center flex flex-col items-center"
+            >
+              <div className="w-12 h-12 bg-red-50 rounded-2xl flex items-center justify-center mb-4 text-red-500">
+                <AlertTriangle className="w-6 h-6 animate-pulse" />
+              </div>
+              <h3 className="text-sm font-extrabold text-slate-800 mb-1">안전하게 로그아웃할까요?</h3>
+              <p className="text-[11px] text-slate-400 mb-5 leading-relaxed">
+                현재 기기에서 WeddingVault 세션을 종료하고 안전하게 보관함을 닫습니다. (데이터는 안전하게 보호됩니다)
+              </p>
+              <div className="flex gap-2 w-full">
+                <button
+                  onClick={() => setShowLogoutConfirm(false)}
+                  className="flex-1 h-9 bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-100 rounded-xl text-xs font-bold"
+                >
+                  취소
+                </button>
+                <button
+                  onClick={confirmSignOut}
+                  className="flex-1 h-9 bg-[#D4537E] hover:bg-[#c2466e] text-white rounded-xl text-xs font-bold"
+                >
+                  로그아웃
+                </button>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
 
     </div>
   );

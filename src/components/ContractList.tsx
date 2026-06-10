@@ -51,6 +51,16 @@ export default function ContractList({ contracts, selectedContract, onOpenContra
   const [editPartnerDiscountTotal, setEditPartnerDiscountTotal] = useState<number>(0);
   
   const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [editError, setEditError] = useState("");
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+
+  const [lastNonNullContract, setLastNonNullContract] = useState<Contract | null>(null);
+
+  if (selectedContract && selectedContract !== lastNonNullContract) {
+    setLastNonNullContract(selectedContract);
+  }
+
+  const activeContract = selectedContract || lastNonNullContract;
 
   // Populate edits
   const startEditing = (contract: Contract) => {
@@ -73,11 +83,14 @@ export default function ContractList({ contracts, selectedContract, onOpenContra
     setEditPartnerDiscountTotal(contract.partner_discount_total || 0);
     setIsEditing(true);
     setDeleteConfirm(false);
+    setEditError("");
+    setShowCancelConfirm(false);
   };
 
   const handleSaveEdits = async (contractId: string) => {
     if (!editVendorName.trim()) return;
     setLoading(true);
+    setEditError("");
     try {
       const pwd = localStorage.getItem("wedding_vault_pwd") || "";
       const encryptedPhone = encryptText(editManagerPhone.trim(), pwd);
@@ -112,13 +125,13 @@ export default function ContractList({ contracts, selectedContract, onOpenContra
       setIsEditing(false);
       // Update local object to reflect in detail sheet instantly
       onOpenContract({
-        ...selectedContract!,
+        ...activeContract!,
         ...updateData,
         updated_at: new Date()
       } as any);
     } catch (e) {
       console.error(e);
-      alert("계약서 수정 중 오차가 발생하였습니다.");
+      setEditError("계약서 수정 및 동기화 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.");
     } finally {
       setLoading(false);
     }
@@ -279,10 +292,7 @@ export default function ContractList({ contracts, selectedContract, onOpenContra
             <motion.div
               onClick={() => {
                 if (!isEditing) onOpenContract(null);
-                else if (confirm("작성 중인 내용이 지워집니다. 뒤로 가시겠습니까?")) {
-                  setIsEditing(false);
-                  onOpenContract(null);
-                }
+                else setShowCancelConfirm(true);
               }}
               initial={{ opacity: 0 }}
               animate={{ opacity: 0.5 }}
@@ -297,7 +307,7 @@ export default function ContractList({ contracts, selectedContract, onOpenContra
               animate={{ y: 0 }}
               exit={{ y: "100%" }}
               transition={{ type: "spring", damping: 25, stiffness: 220 }}
-              className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[420px] bg-white rounded-t-3xl z-50 shadow-2xl overflow-y-auto max-h-[92vh] border-t border-slate-100 flex flex-col md:bottom-0 md:top-0 md:right-0 md:left-auto md:translate-x-0 md:w-[480px] md:max-w-md md:rounded-t-none md:rounded-l-[32px] md:max-h-screen md:border-t-0 md:border-l md:border-slate-150"
+              className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[420px] bg-white rounded-t-3xl z-50 shadow-2xl overflow-y-auto max-h-[92vh] border-t border-slate-100 flex flex-col md:bottom-0 md:top-0 md:right-0 md:left-auto md:translate-x-0 md:w-[480px] md:max-w-md md:rounded-t-none md:rounded-l-[32px] md:max-h-screen md:border-t-0 md:border-l md:border-slate-150 relative"
             >
               {/* Grab handle (Hidden on desktop) */}
               <div className="w-12 h-1 bg-slate-200 rounded-full mx-auto my-3 flex-shrink-0 md:hidden" />
@@ -306,16 +316,16 @@ export default function ContractList({ contracts, selectedContract, onOpenContra
               <div className="px-5 pb-3 flex justify-between items-center border-b border-slate-50 flex-shrink-0">
                 <div>
                   <span className="text-[10px] font-bold text-[#D4537E] bg-[#FBEAF0] px-2 py-0.5 rounded">
-                    {isEditing ? "계약 변경" : selectedContract.category}
+                    {isEditing ? "계약 변경" : activeContract.category}
                   </span>
                   <h2 className="text-lg font-bold text-slate-900 mt-1">
-                    {isEditing ? "정보 수정하기" : selectedContract.vendor_name}
+                    {isEditing ? "정보 수정하기" : activeContract.vendor_name}
                   </h2>
                 </div>
                 <div className="flex items-center gap-2">
                   {!isEditing && (
                     <button
-                      onClick={() => startEditing(selectedContract)}
+                      onClick={() => startEditing(activeContract)}
                       className="p-2 bg-slate-50 hover:bg-slate-100 text-slate-600 rounded-xl"
                     >
                       <Edit3 className="w-4 h-4" />
@@ -324,10 +334,7 @@ export default function ContractList({ contracts, selectedContract, onOpenContra
                   <button
                     onClick={() => {
                       if (!isEditing) onOpenContract(null);
-                      else if (confirm("작성 중인 내용이 지워집니다. 닫으시겠습니까?")) {
-                        setIsEditing(false);
-                        onOpenContract(null);
-                      }
+                      else setShowCancelConfirm(true);
                     }}
                     className="p-2 bg-slate-50 hover:bg-slate-100 text-slate-400 rounded-xl"
                   >
@@ -341,6 +348,12 @@ export default function ContractList({ contracts, selectedContract, onOpenContra
                 {isEditing ? (
                   /* ----------------- EDITING MODE ----------------- */
                   <div className="space-y-4">
+                    {editError && (
+                      <div className="text-xs text-red-500 bg-red-50 border border-red-100 px-3.5 py-3 rounded-xl leading-relaxed flex items-center gap-2">
+                        <AlertTriangle className="w-4.5 h-4.5 text-red-500 flex-shrink-0" />
+                        <span>{editError}</span>
+                      </div>
+                    )}
                     {/* 1. Vendor Name */}
                     <div>
                       <label className="text-[11px] font-bold text-slate-500 mb-1 block">업체 이름 *</label>
@@ -631,7 +644,7 @@ export default function ContractList({ contracts, selectedContract, onOpenContra
                         취소
                       </button>
                       <button
-                        onClick={() => handleSaveEdits(selectedContract.id)}
+                        onClick={() => handleSaveEdits(activeContract.id)}
                         disabled={loading}
                         className="flex-1 h-12 bg-[#D4537E] hover:bg-[#c2466e] text-white font-bold rounded-xl active:scale-95 text-xs flex items-center justify-center gap-1.5"
                       >
@@ -646,35 +659,35 @@ export default function ContractList({ contracts, selectedContract, onOpenContra
                     <div className="bg-slate-50 p-4.5 rounded-2xl flex flex-col gap-3 font-medium">
                       <div className="flex justify-between items-center text-xs">
                         <span className="text-slate-400">총 계약금액</span>
-                        <span className="text-slate-800 font-bold">{formatWon(selectedContract.total_amount)}</span>
+                        <span className="text-slate-800 font-bold">{formatWon(activeContract.total_amount)}</span>
                       </div>
                       <div className="flex justify-between items-center text-xs">
                         <span className="text-slate-400">납부 완료금액</span>
-                        <span className="text-slate-800 font-semibold">{formatWon(selectedContract.paid_amount)}</span>
+                        <span className="text-slate-800 font-semibold">{formatWon(activeContract.paid_amount)}</span>
                       </div>
                       
-                      {selectedContract.partner_discount_total ? (
+                      {activeContract.partner_discount_total ? (
                         <div className="flex justify-between items-center text-xs text-[#D4537E]">
-                          <span className="text-[#D4537E]/85 font-extrabold flex items-center gap-1">
+                           <span className="text-[#D4537E]/85 font-extrabold flex items-center gap-1">
                             💝 짝꿍코드 및 후기 할인
-                            {selectedContract.partner_code && (
+                            {activeContract.partner_code && (
                               <span className="text-[9px] bg-white border border-pink-100 px-1.5 py-0.5 rounded-lg text-[#D4537E] font-medium font-mono">
-                                {selectedContract.partner_code}
+                                {activeContract.partner_code}
                               </span>
                             )}
                           </span>
                           <span className="font-extrabold">
-                            -{formatWon(selectedContract.partner_discount_total)}
-                            {selectedContract.partner_discount_count ? ` (${selectedContract.partner_discount_count}회)` : ""}
+                            -{formatWon(activeContract.partner_discount_total)}
+                            {activeContract.partner_discount_count ? ` (${activeContract.partner_discount_count}회)` : ""}
                           </span>
                         </div>
-                      ) : selectedContract.partner_code ? (
+                      ) : activeContract.partner_code ? (
                         <div className="flex justify-between items-center text-xs text-slate-500">
                           <span className="text-slate-400 font-bold flex items-center gap-1">
                             💝 등록된 짝꿍코드
                           </span>
                           <span className="font-bold text-slate-700 bg-white border border-slate-200 px-2.5 py-0.5 rounded-lg font-mono">
-                            {selectedContract.partner_code}
+                            {activeContract.partner_code}
                           </span>
                         </div>
                       ) : null}
@@ -682,13 +695,13 @@ export default function ContractList({ contracts, selectedContract, onOpenContra
                       <div className="flex justify-between items-center border-t border-slate-100 pt-2.5 mt-0.5">
                         <span className="text-xs font-bold text-[#D4537E]">납부 대기 잔금</span>
                         <span className="text-base font-extrabold text-[#D4537E]">
-                          {formatWon(Math.max(0, selectedContract.total_amount - selectedContract.paid_amount - (selectedContract.partner_discount_total || 0)))}
+                          {formatWon(Math.max(0, activeContract.total_amount - activeContract.paid_amount - (activeContract.partner_discount_total || 0)))}
                         </span>
                       </div>
-                      {selectedContract.balance_due_date && (
+                      {activeContract.balance_due_date && (
                         <div className="bg-white px-3 py-2 rounded-xl text-[11px] text-slate-500 border border-slate-100 flex justify-between items-center mt-1">
-                          <span>잔금 기한: {selectedContract.balance_due_date}</span>
-                          {renderDDayBadge(selectedContract.balance_due_date)}
+                          <span>잔금 기한: {activeContract.balance_due_date}</span>
+                          {renderDDayBadge(activeContract.balance_due_date)}
                         </div>
                       )}
                     </div>
@@ -699,14 +712,14 @@ export default function ContractList({ contracts, selectedContract, onOpenContra
                         <Calendar className="w-4 h-4 text-slate-400" />
                         <div>
                           <span className="text-[10px] text-slate-400 block font-semibold leading-none mb-0.5">계약 체결일</span>
-                          <span className="text-xs font-bold text-slate-700">{selectedContract.contract_date || "기록 없음"}</span>
+                          <span className="text-xs font-bold text-slate-700">{activeContract.contract_date || "기록 없음"}</span>
                         </div>
                       </div>
                       <div className="flex items-center gap-2.5 border-l border-slate-100 pl-3">
                         <Calendar className="w-4 h-4 text-slate-400" />
                         <div>
                           <span className="text-[10px] text-slate-400 block font-semibold leading-none mb-0.5">이용 예정일</span>
-                          <span className="text-xs font-bold text-slate-700">{selectedContract.event_date || "기록 없음"}</span>
+                          <span className="text-xs font-bold text-slate-700">{activeContract.event_date || "기록 없음"}</span>
                         </div>
                       </div>
                     </div>
@@ -714,11 +727,11 @@ export default function ContractList({ contracts, selectedContract, onOpenContra
                     {/* Vendor Manager Info with Decryption */}
                     {(() => {
                       const pwd = localStorage.getItem("wedding_vault_pwd") || "";
-                      const decryptedPhone = selectedContract.manager_phone 
-                        ? decryptText(selectedContract.manager_phone, pwd)
+                      const decryptedPhone = activeContract.manager_phone 
+                        ? decryptText(activeContract.manager_phone, pwd)
                         : "";
                       
-                      const hasManager = !!selectedContract.manager_name;
+                      const hasManager = !!activeContract.manager_name;
                       const hasPhone = !!decryptedPhone;
                       
                       if (!hasManager && !hasPhone) return null;
@@ -730,7 +743,7 @@ export default function ContractList({ contracts, selectedContract, onOpenContra
                             <div>
                               <span className="text-[10px] text-slate-400 block font-semibold leading-none mb-0.5">계약 담당자</span>
                               <span className="text-xs font-bold text-slate-700 block">
-                                {selectedContract.manager_name || "담당 실장 / 본사"}
+                                {activeContract.manager_name || "담당 실장 / 본사"}
                               </span>
                               {decryptedPhone && (
                                 <span className="text-[10px] text-[#D4537E] font-extrabold tracking-tight mt-0.5 flex items-center gap-1">
@@ -754,7 +767,7 @@ export default function ContractList({ contracts, selectedContract, onOpenContra
                     {/* Details checklist table */}
                     <div>
                       <h3 className="text-xs font-extrabold text-slate-800 mb-2.5 flex items-center gap-1.5">
-                        <FileText className="w-4 h-4 text-slate-500" /> 제공 항목 상세 테이블 ({selectedContract.details?.length || 0})
+                        <FileText className="w-4 h-4 text-slate-500" /> 제공 항목 상세 테이블 ({activeContract.details?.length || 0})
                       </h3>
                       <div className="border border-slate-100 rounded-xl overflow-hidden bg-white">
                         <table id="details-table" className="w-full text-left text-[11px] border-collapse">
@@ -766,12 +779,12 @@ export default function ContractList({ contracts, selectedContract, onOpenContra
                             </tr>
                           </thead>
                           <tbody>
-                            {(!selectedContract.details || selectedContract.details.length === 0) ? (
+                            {(!activeContract.details || activeContract.details.length === 0) ? (
                               <tr>
                                 <td colSpan={3} className="py-6 text-center text-slate-300 font-medium">제공 항목 내용이 기록되어 있지 않습니다.</td>
                               </tr>
                             ) : (
-                              selectedContract.details.map((row, idx) => (
+                              activeContract.details.map((row, idx) => (
                                 <tr key={idx} className="border-b border-slate-50 last:border-none hover:bg-slate-50/50">
                                   <td className="py-2.5 px-3 font-bold text-slate-700">{row.구분 || "-"}</td>
                                   <td className="py-2.5 px-3 text-slate-500 leading-relaxed">{row.내용 || "-"}</td>
@@ -785,24 +798,24 @@ export default function ContractList({ contracts, selectedContract, onOpenContra
                     </div>
 
                     {/* Memo */}
-                    {selectedContract.memo && (
+                    {activeContract.memo && (
                       <div className="bg-[#FAEEDA]/40 border border-[#FAEEDA] p-4 rounded-2xl">
                         <span className="text-[10px] font-extrabold text-[#C26B1E] block mb-1">우리 메모 & 특이사항</span>
                         <p className="text-xs text-slate-600 whitespace-pre-wrap leading-relaxed font-medium">
-                          {selectedContract.memo}
+                          {activeContract.memo}
                         </p>
                       </div>
                     )}
 
                     {/* Last edited timestamp footer */}
-                    {selectedContract.updated_at && (
+                    {activeContract.updated_at && (
                       <div className="text-[9px] text-slate-300 text-right">
                         최종 수정 시간: {
-                          typeof selectedContract.updated_at.toDate === "function"
-                            ? selectedContract.updated_at.toDate().toLocaleString()
-                            : selectedContract.updated_at.seconds
-                            ? new Date(selectedContract.updated_at.seconds * 1000).toLocaleString()
-                            : new Date(selectedContract.updated_at).toLocaleString()
+                          typeof activeContract.updated_at.toDate === "function"
+                            ? activeContract.updated_at.toDate().toLocaleString()
+                            : activeContract.updated_at.seconds
+                            ? new Date(activeContract.updated_at.seconds * 1000).toLocaleString()
+                            : new Date(activeContract.updated_at).toLocaleString()
                         }
                       </div>
                     )}
@@ -822,7 +835,7 @@ export default function ContractList({ contracts, selectedContract, onOpenContra
                               삭제 취소
                             </button>
                             <button
-                              onClick={() => handleDeleteContract(selectedContract.id)}
+                              onClick={() => handleDeleteContract(activeContract.id)}
                               className="flex-1 h-9 bg-red-500 hover:bg-red-600 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-1"
                             >
                               <Trash2 className="w-3.5 h-3.5" /> 영구 삭제
@@ -841,6 +854,37 @@ export default function ContractList({ contracts, selectedContract, onOpenContra
                   </div>
                 )}
               </div>
+
+              {/* Custom Cancel Edit Confirmation Overlay */}
+              {showCancelConfirm && (
+                <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-xs z-[60] flex items-center justify-center p-6 transition-all">
+                  <div className="bg-white rounded-3xl p-5 shadow-2xl border border-slate-100 max-w-[290px] text-center flex flex-col items-center">
+                    <div className="w-12 h-12 bg-amber-50 rounded-2xl flex items-center justify-center mb-4 text-amber-500">
+                      <AlertTriangle className="w-6 h-6 animate-pulse" />
+                    </div>
+                    <h3 className="text-sm font-extrabold text-slate-800 mb-1">작성을 취소하시겠습니까?</h3>
+                    <p className="text-[11px] text-slate-400 mb-5 leading-relaxed">작성 중이거나 변경된 내용이 저장되지 않고 모두 지워집니다.</p>
+                    <div className="flex gap-2 w-full">
+                      <button
+                        onClick={() => setShowCancelConfirm(false)}
+                        className="flex-1 h-9 bg-slate-50 hover:bg-slate-100 text-slate-600 border border-slate-100 rounded-xl text-xs font-bold"
+                      >
+                        계속 수정
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShowCancelConfirm(false);
+                          setIsEditing(false);
+                          onOpenContract(null);
+                        }}
+                        className="flex-1 h-9 bg-[#D4537E] hover:bg-[#c2466e] text-white rounded-xl text-xs font-bold"
+                      >
+                        수정 취소
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </motion.div>
           </>
         )}
