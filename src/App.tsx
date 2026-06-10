@@ -16,6 +16,7 @@ export default function App() {
   const [initializing, setInitializing] = useState(true);
   const [user, setUser] = useState<any>(null);
   const [profileName, setProfileName] = useState("");
+  const [personalName, setPersonalName] = useState("");
   const [coupleId, setCoupleId] = useState<string | null>(null);
   const [contracts, setContracts] = useState<Contract[]>([]);
 
@@ -25,40 +26,55 @@ export default function App() {
   // Direct details sheet selection
   const [selectedContract, setSelectedContract] = useState<Contract | null>(null);
 
-  // 1. Listen for authentication changes
+  // Sync personal nickname on user change
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      setUser(currentUser);
-      if (currentUser) {
-        // Fetch or listen to user profile
-        const profileRef = doc(db, "profiles", currentUser.uid);
+    const saved = localStorage.getItem("wedding_user_nickname");
+    if (saved) {
+      setPersonalName(saved);
+    } else {
+      setPersonalName("");
+    }
+  }, [user]);
+
+  // 1. Custom Initialization of Auth State from Local Storage
+  useEffect(() => {
+    const savedUserStr = localStorage.getItem("wedding_custom_user");
+    const savedCoupleId = localStorage.getItem("wedding_couple_id");
+    const savedNickname = localStorage.getItem("wedding_user_nickname");
+
+    if (savedUserStr && savedCoupleId) {
+      try {
+        const parsedUser = JSON.parse(savedUserStr);
+        setUser(parsedUser);
+        setCoupleId(savedCoupleId);
+        setProfileName(savedNickname || parsedUser.displayName || "웨딩메이트");
         
-        // Listen to profile document in real-time
+        // Setup real-time listener to user profile just in case it changes
+        const profileRef = doc(db, "profiles", parsedUser.uid);
         const unsubProfile = onSnapshot(profileRef, (snap) => {
           if (snap.exists()) {
             const data = snap.data();
-            setProfileName(data.name || currentUser.displayName || "웨딩메이트");
-            setCoupleId(data.couple_id || null);
-          } else {
-            setProfileName(currentUser.displayName || "웨딩메이트");
-            setCoupleId(null);
+            setProfileName(data.name || "웨딩메이트");
           }
-          setInitializing(false);
         }, (err) => {
-          handleFirestoreError(err, OperationType.GET, `profiles/${currentUser.uid}`);
-          setInitializing(false);
+          console.warn("Failed to listen to profile changes:", err);
         });
-
+        
+        setInitializing(false);
         return () => unsubProfile();
-      } else {
-        setProfileName("");
+      } catch (e) {
+        console.error("Failed to parse local stored user:", e);
+        localStorage.removeItem("wedding_custom_user");
+        localStorage.removeItem("wedding_couple_id");
+        setUser(null);
         setCoupleId(null);
-        setContracts([]);
         setInitializing(false);
       }
-    });
-
-    return () => unsubscribe();
+    } else {
+      setUser(null);
+      setCoupleId(null);
+      setInitializing(false);
+    }
   }, []);
 
   // 2. Realtime sync contracts when couple ID is resolved
@@ -71,8 +87,7 @@ export default function App() {
     const contractsRef = collection(db, "contracts");
     const q = query(
       contractsRef,
-      where("couple_id", "==", coupleId),
-      orderBy("created_at", "desc")
+      where("couple_id", "==", coupleId)
     );
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -84,6 +99,38 @@ export default function App() {
           ...data,
         } as Contract);
       });
+
+      // Secure client-side sorting by created_at desc to avoid composite index requirements
+      contractsList.sort((a, b) => {
+        const valA = a.created_at;
+        const valB = b.created_at;
+        
+        let timeA = 0;
+        let timeB = 0;
+        
+        if (valA) {
+          if (typeof valA.toDate === "function") {
+            timeA = valA.toDate().getTime();
+          } else if (valA.seconds) {
+            timeA = valA.seconds * 1000;
+          } else {
+            timeA = new Date(valA).getTime() || 0;
+          }
+        }
+        
+        if (valB) {
+          if (typeof valB.toDate === "function") {
+            timeB = valB.toDate().getTime();
+          } else if (valB.seconds) {
+            timeB = valB.seconds * 1000;
+          } else {
+            timeB = new Date(valB).getTime() || 0;
+          }
+        }
+        
+        return timeB - timeA;
+      });
+
       setContracts(contractsList);
 
       // Keep selected contract object in sync with changes from the database snapshot
@@ -96,21 +143,33 @@ export default function App() {
         }
       }
     }, (err) => {
-      // Caught and log permission-denied or firebase errors securely
-      handleFirestoreError(err, OperationType.LIST, "contracts");
+      console.warn("contracts list subscription issue:", err);
     });
 
     return () => unsubscribe();
   }, [coupleId]);
 
   const handleAuthSuccess = (newCoupleId: string, name: string) => {
+    const savedUserStr = localStorage.getItem("wedding_custom_user");
+    if (savedUserStr) {
+      setUser(JSON.parse(savedUserStr));
+    } else {
+      setUser({ uid: `user_${name}`, displayName: name });
+    }
     setCoupleId(newCoupleId);
     setProfileName(name);
   };
 
-  const handleSignOut = async () => {
+  const handleSignOut = () => {
     if (confirm("웨딩볼트에서 로그아웃 하시겠습니까?")) {
-      await signOut(auth);
+      localStorage.removeItem("wedding_custom_user");
+      localStorage.removeItem("wedding_couple_id");
+      localStorage.removeItem("wedding_user_nickname");
+      setUser(null);
+      setCoupleId(null);
+      setProfileName("");
+      setPersonalName("");
+      setContracts([]);
     }
   };
 
@@ -148,7 +207,7 @@ export default function App() {
             <div className="flex items-center gap-2.5">
               <span className="text-[11px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-lg flex items-center gap-1">
                 <HeartHandshake className="w-3.5 h-3.5 text-[#D4537E]" />
-                {profileName}님
+                {personalName || profileName || "웨딩메이트"}님
               </span>
               <button
                 id="signout-header-btn"
