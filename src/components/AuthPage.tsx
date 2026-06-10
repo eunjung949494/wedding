@@ -83,6 +83,7 @@ export default function AuthPage({ onAuthComplete }: AuthPageProps) {
       };
       localStorage.setItem("wedding_custom_user", JSON.stringify(customUserObj));
       localStorage.setItem("wedding_couple_id", coupleId);
+      localStorage.setItem("wedding_vault_pwd", cleanPassword);
 
       onAuthComplete(coupleId, finalNickname);
     } catch (err: any) {

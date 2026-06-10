@@ -33,6 +33,12 @@ export interface Contract {
   last_edited_by: string;
   updated_at: any; // Firestore serverTimestamp
   created_at: any; // Firestore serverTimestamp
+  
+  // Partner code & review discounts
+  partner_code?: string;
+  partner_discount_per_count?: number;
+  partner_discount_count?: number;
+  partner_discount_total?: number;
 }
 
 export interface Couple {

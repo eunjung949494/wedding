@@ -6,6 +6,7 @@ import {
   Sparkles, FileText, Upload, Plus, Trash, Check, Loader2, Info, ArrowRight, TableProperties 
 } from "lucide-react";
 import { motion } from "motion/react";
+import { encryptText } from "../lib/encryption";
 
 interface ContractFormProps {
   coupleId: string;
@@ -34,6 +35,12 @@ export default function ContractForm({ coupleId, uid, onSuccess }: ContractFormP
   const [status, setStatus] = useState<"계약완료" | "잔금대기" | "잔금완료" | "취소">("계약완료");
   const [memo, setMemo] = useState("");
   const [details, setDetails] = useState<ContractDetailRow[]>(CATEGORY_DEFAULT_DETAILS["기타"]);
+
+  // Partner Discount & Review states
+  const [partnerCode, setPartnerCode] = useState("");
+  const [partnerDiscountPerCount, setPartnerDiscountPerCount] = useState<number>(0);
+  const [partnerDiscountCount, setPartnerDiscountCount] = useState<number>(0);
+  const [partnerDiscountTotal, setPartnerDiscountTotal] = useState<number>(0);
 
   // Drag handlers
   const handleDrag = (e: DragEvent) => {
@@ -163,6 +170,9 @@ export default function ContractForm({ coupleId, uid, onSuccess }: ContractFormP
       const contractId = `contract_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
       const docRef = doc(contractsRef, contractId);
 
+      const pwd = localStorage.getItem("wedding_vault_pwd") || "";
+      const encryptedPhone = encryptText(managerPhone.trim(), pwd);
+
       const contractPayload = {
         couple_id: coupleId,
         vendor_name: vendorName.trim(),
@@ -173,13 +183,18 @@ export default function ContractForm({ coupleId, uid, onSuccess }: ContractFormP
         paid_amount: Number(paidAmount || 0),
         balance_due_date: balanceDueDate,
         manager_name: managerName.trim(),
-        manager_phone: managerPhone.trim(),
+        manager_phone: encryptedPhone,
         status,
         memo,
         details,
         last_edited_by: uid,
         updated_at: serverTimestamp(),
         created_at: serverTimestamp(),
+        // Discounts
+        partner_code: partnerCode.trim(),
+        partner_discount_per_count: Number(partnerDiscountPerCount || 0),
+        partner_discount_count: Number(partnerDiscountCount || 0),
+        partner_discount_total: Number(partnerDiscountTotal || 0),
       };
 
       await setDoc(docRef, contractPayload).catch(err => 
@@ -199,6 +214,10 @@ export default function ContractForm({ coupleId, uid, onSuccess }: ContractFormP
       setStatus("계약완료");
       setMemo("");
       setDetails(CATEGORY_DEFAULT_DETAILS["기타"]);
+      setPartnerCode("");
+      setPartnerDiscountPerCount(0);
+      setPartnerDiscountCount(0);
+      setPartnerDiscountTotal(0);
 
       onSuccess(); // Switch back to list view tab
     } catch (err: any) {
@@ -210,74 +229,77 @@ export default function ContractForm({ coupleId, uid, onSuccess }: ContractFormP
   };
 
   return (
-    <div id="contract-form-container" className="flex flex-col gap-5">
-      {/* 1. Header Sparkle tag */}
-      <div className="bg-gradient-to-br from-[#FBEAF0] to-[#FBEAF0]/40 border border-[#ED93B1]/20 p-5 rounded-3xl flex flex-col gap-3.5 relative overflow-hidden shadow-xs">
-        <div className="absolute right-0 bottom-0 text-[#ED93B1] opacity-10 pointer-events-none -mr-4 -mb-4">
-          <Sparkles className="w-24 h-24" />
-        </div>
-        <div className="z-10">
-          <div className="flex items-center gap-1.5 text-xs font-black text-[#D4537E]">
-            <Sparkles className="w-3.5 h-3.5 fill-current animate-pulse" />
-            <span>AI 계약서 분석 업로드</span>
+    <div id="contract-form-container" className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
+      {/* Left Column: AI contract files upload and analyzer */}
+      <div className="md:col-span-5 flex flex-col gap-4 md:sticky md:top-[90px]">
+        {/* 1. Header Sparkle tag */}
+        <div className="bg-gradient-to-br from-[#FBEAF0] to-[#FBEAF0]/40 border border-[#ED93B1]/20 p-5 rounded-3xl flex flex-col gap-3.5 relative overflow-hidden shadow-xs">
+          <div className="absolute right-0 bottom-0 text-[#ED93B1] opacity-10 pointer-events-none -mr-4 -mb-4">
+            <Sparkles className="w-24 h-24" />
           </div>
-          <p className="text-slate-600 text-[11px] leading-relaxed mt-1.5 font-medium">
-            계약서 사진(JPG, PNG) 및 PDF 문서를 올리면 Gemini AI가 계약 내역과 금액, 제공 테이블을 자동으로 파싱하여 입력해 줍니다.
-          </p>
-        </div>
-
-        {/* AI Drop/Upload box */}
-        <div
-          id="ai-dropzone"
-          onDragEnter={handleDrag}
-          onDragOver={handleDrag}
-          onDragLeave={handleDrag}
-          onDrop={handleDrop}
-          onClick={() => fileInputRef.current?.click()}
-          className={`h-36 rounded-2xl border-2 border-dashed flex flex-col items-center justify-center cursor-pointer transition-all ${
-            dragActive
-              ? "border-[#D4537E] bg-[#FBEAF0] shadow-md shadow-pink-100"
-              : "border-[#ED93B1]/40 bg-white hover:border-[#D4537E]"
-          } relative overflow-hidden`}
-        >
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*,application/pdf"
-            onChange={handleFileChange}
-            className="hidden"
-          />
-
-          {aiLoading ? (
-            <div className="flex flex-col items-center gap-2">
-              <Loader2 className="w-8 h-8 animate-spin text-[#D4537E]" />
-              <span className="text-xs font-extrabold text-slate-700 animate-pulse">계약서 문서를 분석하고 있습니다...</span>
-              <span className="text-[10px] text-[#D4537E] font-medium bg-[#FBEAF0] px-2 py-0.5 rounded-full">대략 5초 가량 소요됩니다</span>
+          <div className="z-10">
+            <div className="flex items-center gap-1.5 text-xs font-black text-[#D4537E]">
+              <Sparkles className="w-3.5 h-3.5 fill-current animate-pulse" />
+              <span>AI 계약서 분석 업로드</span>
             </div>
-          ) : (
-            <div className="flex flex-col items-center gap-2 px-6 text-center">
-              <div className="w-10 h-10 rounded-full bg-[#FBEAF0]/40 flex items-center justify-center text-[#D4537E] border border-pink-100/50">
-                <Upload className="w-5 h-5 animate-bounce" style={{ animationDuration: '3s' }} />
+            <p className="text-slate-600 text-[11px] leading-relaxed mt-1.5 font-medium">
+              계약서 사진(JPG, PNG) 및 PDF 문서를 올리면 Gemini AI가 계약 내역과 금액, 제공 테이블을 자동으로 파싱하여 입력해 줍니다.
+            </p>
+          </div>
+
+          {/* AI Drop/Upload box */}
+          <div
+            id="ai-dropzone"
+            onDragEnter={handleDrag}
+            onDragOver={handleDrag}
+            onDragLeave={handleDrag}
+            onDrop={handleDrop}
+            onClick={() => fileInputRef.current?.click()}
+            className={`h-36 rounded-2xl border-2 border-dashed flex flex-col items-center justify-center cursor-pointer transition-all ${
+              dragActive
+                ? "border-[#D4537E] bg-[#FBEAF0] shadow-md shadow-pink-100"
+                : "border-[#ED93B1]/40 bg-white hover:border-[#D4537E]"
+            } relative overflow-hidden`}
+          >
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*,application/pdf"
+              onChange={handleFileChange}
+              className="hidden"
+            />
+
+            {aiLoading ? (
+              <div className="flex flex-col items-center gap-2">
+                <Loader2 className="w-8 h-8 animate-spin text-[#D4537E]" />
+                <span className="text-xs font-extrabold text-slate-700 animate-pulse">계약서 문서를 분석하고 있습니다...</span>
+                <span className="text-[10px] text-[#D4537E] font-medium bg-[#FBEAF0] px-2 py-0.5 rounded-full">대략 5초 가량 소요됩니다</span>
               </div>
-              <p className="text-xs font-extrabold text-slate-700">
-                파일 끌어다 놓기 또는 클릭
-              </p>
-              <span className="text-[10px] text-slate-400 font-medium">
-                지원 파일: JPEG, PNG, PDF (최대 10MB)
-              </span>
-            </div>
-          )}
+            ) : (
+              <div className="flex flex-col items-center gap-2 px-6 text-center">
+                <div className="w-10 h-10 rounded-full bg-[#FBEAF0]/40 flex items-center justify-center text-[#D4537E] border border-pink-100/50">
+                  <Upload className="w-5 h-5 animate-bounce" style={{ animationDuration: '3s' }} />
+                </div>
+                <p className="text-xs font-extrabold text-slate-700">
+                  파일 끌어다 놓기 또는 클릭
+                </p>
+                <span className="text-[10px] text-slate-400 font-medium">
+                  지원 파일: JPEG, PNG, PDF (최대 10MB)
+                </span>
+              </div>
+            )}
+          </div>
         </div>
+
+        {errorMessage && (
+          <div className="text-xs text-red-500 bg-red-50 border border-red-100 px-3 py-2.5 rounded-xl text-center font-bold">
+            {errorMessage}
+          </div>
+        )}
       </div>
 
-      {errorMessage && (
-        <div className="text-xs text-red-500 bg-red-50 border border-red-100 px-3 py-2.5 rounded-xl text-center font-bold">
-          {errorMessage}
-        </div>
-      )}
-
-      {/* 2. Manual entry Form */}
-      <form onSubmit={handleSubmit} className="bg-white p-5 rounded-3xl border border-slate-150/70 shadow-sm flex flex-col gap-4">
+      {/* Right Column: Direct details entry */}
+      <form onSubmit={handleSubmit} className="md:col-span-7 bg-white p-5 rounded-3xl border border-slate-150/70 shadow-sm flex flex-col gap-4">
         <div className="flex items-center gap-2 border-b border-slate-50 pb-2.5">
           <FileText className="w-4.5 h-4.5 text-[#D4537E]" />
           <h3 className="text-sm font-black text-slate-900">계약 정보 직접 입력</h3>
@@ -390,6 +412,110 @@ export default function ContractForm({ coupleId, uid, onSuccess }: ContractFormP
           </div>
         </div>
 
+        {/* Partner code and discount calculator block */}
+        <div className="bg-gradient-to-br from-[#FBEAF0]/40 to-[#FAEEDA]/30 border border-[#ED93B1]/20 rounded-2xl p-4 flex flex-col gap-3.5">
+          <div className="flex items-center gap-1.5 text-xs font-black text-[#D4537E]">
+            <span>💝 짝꿍코드 / 후기 할인 혜택</span>
+            <span className="text-[9px] font-semibold text-[#D4537E] bg-white/80 px-2 py-0.5 rounded-full border border-[#ED93B1]/10">잔금 자동 차감</span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-35">
+            <div>
+              <label className="text-[10px] font-bold text-slate-400 mb-1 block">추천/짝꿍 코드</label>
+              <input
+                id="form-partner-code"
+                type="text"
+                placeholder="예: 260610민우 (보관용)"
+                value={partnerCode}
+                onChange={(e) => setPartnerCode(e.target.value)}
+                className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl outline-none focus:border-[#D4537E] text-xs text-slate-700 font-medium"
+              />
+            </div>
+
+            <div>
+              <label className="text-[10px] font-bold text-slate-400 mb-1 block">1회당 할인액 (원)</label>
+              <input
+                id="form-partner-discount-per"
+                type="number"
+                placeholder="0"
+                value={partnerDiscountPerCount === 0 ? "" : partnerDiscountPerCount}
+                onChange={(e) => {
+                  const per = Number(e.target.value);
+                  setPartnerDiscountPerCount(per);
+                  setPartnerDiscountTotal(per * partnerDiscountCount);
+                }}
+                className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl outline-none focus:border-[#D4537E] text-[#D4537E] text-xs font-semibold"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-35">
+            <div>
+              <label className="text-[10px] font-bold text-slate-400 mb-1 block">추천인 횟수 (회)</label>
+              <div className="flex items-center">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const newCount = Math.max(0, partnerDiscountCount - 1);
+                    setPartnerDiscountCount(newCount);
+                    setPartnerDiscountTotal(partnerDiscountPerCount * newCount);
+                  }}
+                  className="w-9 h-10 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 rounded-l-xl font-bold flex items-center justify-center transition-colors active:scale-95"
+                >
+                  -
+                </button>
+                <input
+                  id="form-partner-discount-count"
+                  type="number"
+                  placeholder="0"
+                  value={partnerDiscountCount}
+                  onChange={(e) => {
+                    const cnt = Number(e.target.value);
+                    setPartnerDiscountCount(cnt);
+                    setPartnerDiscountTotal(partnerDiscountPerCount * cnt);
+                  }}
+                  className="w-full h-10 text-center border-y border-slate-200 outline-none focus:border-[#D4537E] text-xs text-slate-800 font-bold"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const newCount = partnerDiscountCount + 1;
+                    setPartnerDiscountCount(newCount);
+                    setPartnerDiscountTotal(partnerDiscountPerCount * newCount);
+                  }}
+                  className="w-9 h-10 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 rounded-r-xl font-bold flex items-center justify-center transition-colors active:scale-95"
+                >
+                  +
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label className="text-[10px] font-bold text-slate-400 mb-1 block">총 할인액 (원) - 수정가능</label>
+              <input
+                id="form-partner-discount-total"
+                type="number"
+                placeholder="0"
+                value={partnerDiscountTotal === 0 ? "" : partnerDiscountTotal}
+                onChange={(e) => setPartnerDiscountTotal(Number(e.target.value))}
+                className="w-full h-10 px-3 bg-white border border-[#ED93B1]/40 rounded-xl outline-none focus:border-[#D4537E] text-xs text-[#D4537E] font-bold"
+              />
+            </div>
+          </div>
+
+          {/* Show calculation live preview */}
+          {partnerDiscountTotal > 0 && (
+            <div className="bg-white/80 px-3.5 py-2.5 rounded-xl text-[10px] border border-pink-100/10 flex justify-between items-center text-slate-500 animate-fade-in mt-1">
+              <span className="font-bold text-slate-500">지불할 남은 잔금 예상</span>
+              <span className="font-extrabold text-[#D4537E]">
+                {totalAmount - paidAmount - partnerDiscountTotal > 0 
+                  ? `${(totalAmount - paidAmount - partnerDiscountTotal).toLocaleString()}원 (기존 잔금에서 ${partnerDiscountTotal.toLocaleString()}원 할인됨)`
+                  : "0원 (할인으로 잔금이 모두 상쇄되었습니다! 🎉)"}
+              </span>
+            </div>
+          )}
+        </div>
+
         {/* Balance payment deadline */}
         <div>
           <label className="text-[11px] font-bold text-slate-400 mb-1 block">잔금 납부 기한</label>
@@ -425,6 +551,9 @@ export default function ContractForm({ coupleId, uid, onSuccess }: ContractFormP
               onChange={(e) => setManagerPhone(e.target.value)}
               className="w-full h-11 px-3 border border-slate-200 rounded-xl outline-none focus:border-[#D4537E] text-slate-700"
             />
+            <span className="text-[9px] text-[#D4537E] font-bold mt-1 flex items-center gap-0.5">
+              🔒 비밀번호로 안전하게 암호화됨
+            </span>
           </div>
         </div>
 

@@ -12,8 +12,10 @@ export default function Dashboard({ contracts, onOpenContract }: DashboardProps)
   // Calculations
   const totalAmount = contracts.reduce((sum, c) => (c.status !== "취소" ? sum + c.total_amount : sum), 0);
   const paidAmount = contracts.reduce((sum, c) => (c.status !== "취소" ? sum + c.paid_amount : sum), 0);
-  const balanceAmount = totalAmount - paidAmount;
-  const payPercentage = totalAmount > 0 ? Math.round((paidAmount / totalAmount) * 100) : 0;
+  const totalDiscount = contracts.reduce((sum, c) => (c.status !== "취소" ? sum + (c.partner_discount_total || 0) : sum), 0);
+  const balanceAmount = Math.max(0, totalAmount - paidAmount - totalDiscount);
+  // payment progress includes paid amount + discount credits applied to original amount
+  const payPercentage = totalAmount > 0 ? Math.min(100, Math.round(((paidAmount + totalDiscount) / totalAmount) * 100)) : 0;
 
   // Balance due schedules: sort only non-complete, non-canceled contracts with balance dates
   const rawToday = new Date();
@@ -28,7 +30,7 @@ export default function Dashboard({ contracts, onOpenContract }: DashboardProps)
   };
 
   const activeSchedules = contracts
-    .filter((c) => c.status !== "취소" && c.status !== "잔금완료" && c.balance_due_date && (c.total_amount - c.paid_amount) > 0)
+    .filter((c) => c.status !== "취소" && c.status !== "잔금완료" && c.balance_due_date && (c.total_amount - c.paid_amount - (c.partner_discount_total || 0)) > 0)
     .map((c) => {
       const days = getDDay(c.balance_due_date);
       return { contract: c, days };
@@ -90,7 +92,7 @@ export default function Dashboard({ contracts, onOpenContract }: DashboardProps)
       </div>
 
       {/* 2. Three core amount items */}
-      <div className="grid grid-cols-1 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
         {/* Total contract amount card */}
         <div className="bg-white px-5 py-4.5 rounded-3xl border border-slate-100/80 shadow-xs flex items-center gap-4 hover:shadow-sm transition-all">
           <div className="w-11 h-11 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-500 border border-slate-100/50">
@@ -144,10 +146,10 @@ export default function Dashboard({ contracts, onOpenContract }: DashboardProps)
             <span className="text-[11px] text-slate-300">모든 잔금을 무사히 납부했거나 준비를 완료했습니다.</span>
           </div>
         ) : (
-          <div id="balance-schedules-list" className="flex flex-col gap-3">
+          <div id="balance-schedules-list" className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
             {activeSchedules.map(({ contract, days }, idx) => {
-              const badge = getDDayBadge(days);
-              const remainingVal = contract.total_amount - contract.paid_amount;
+               const badge = getDDayBadge(days);
+               const remainingVal = Math.max(0, contract.total_amount - contract.paid_amount - (contract.partner_discount_total || 0));
               
               // Custom date parsing for calendar display
               let calMonth = "DUE";

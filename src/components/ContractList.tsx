@@ -8,12 +8,14 @@ import {
   Check, Plus, Trash, AlertTriangle, ArrowRight, UserCircle 
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
+import { encryptText, decryptText } from "../lib/encryption";
 
 interface ContractListProps {
   contracts: Contract[];
   selectedContract: Contract | null;
   onOpenContract: (contract: Contract | null) => void;
   uid: string;
+  isDesktop?: boolean;
 }
 
 const statusThemes = {
@@ -23,7 +25,7 @@ const statusThemes = {
   취소: { bg: "bg-slate-100", text: "text-slate-500" },
 };
 
-export default function ContractList({ contracts, selectedContract, onOpenContract, uid }: ContractListProps) {
+export default function ContractList({ contracts, selectedContract, onOpenContract, uid, isDesktop = false }: ContractListProps) {
   const [activeCategory, setActiveCategory] = useState<"전체" | WeddingCategory>("전체");
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -41,11 +43,18 @@ export default function ContractList({ contracts, selectedContract, onOpenContra
   const [editStatus, setEditStatus] = useState<"계약완료" | "잔금대기" | "잔금완료" | "취소">("계약완료");
   const [editMemo, setEditMemo] = useState("");
   const [editDetails, setEditDetails] = useState<ContractDetailRow[]>([]);
+
+  // Edit states for discounts
+  const [editPartnerCode, setEditPartnerCode] = useState("");
+  const [editPartnerDiscountPerCount, setEditPartnerDiscountPerCount] = useState<number>(0);
+  const [editPartnerDiscountCount, setEditPartnerDiscountCount] = useState<number>(0);
+  const [editPartnerDiscountTotal, setEditPartnerDiscountTotal] = useState<number>(0);
   
   const [deleteConfirm, setDeleteConfirm] = useState(false);
 
   // Populate edits
   const startEditing = (contract: Contract) => {
+    const pwd = localStorage.getItem("wedding_vault_pwd") || "";
     setEditVendorName(contract.vendor_name);
     setEditCategory(contract.category);
     setEditContractDate(contract.contract_date || "");
@@ -54,10 +63,14 @@ export default function ContractList({ contracts, selectedContract, onOpenContra
     setEditPaidAmount(contract.paid_amount || 0);
     setEditBalanceDueDate(contract.balance_due_date || "");
     setEditManagerName(contract.manager_name || "");
-    setEditManagerPhone(contract.manager_phone || "");
+    setEditManagerPhone(contract.manager_phone ? decryptText(contract.manager_phone, pwd) : "");
     setEditStatus(contract.status || "계약완료");
     setEditMemo(contract.memo || "");
     setEditDetails([...(contract.details || [])]);
+    setEditPartnerCode(contract.partner_code || "");
+    setEditPartnerDiscountPerCount(contract.partner_discount_per_count || 0);
+    setEditPartnerDiscountCount(contract.partner_discount_count || 0);
+    setEditPartnerDiscountTotal(contract.partner_discount_total || 0);
     setIsEditing(true);
     setDeleteConfirm(false);
   };
@@ -66,6 +79,9 @@ export default function ContractList({ contracts, selectedContract, onOpenContra
     if (!editVendorName.trim()) return;
     setLoading(true);
     try {
+      const pwd = localStorage.getItem("wedding_vault_pwd") || "";
+      const encryptedPhone = encryptText(editManagerPhone.trim(), pwd);
+
       const contractRef = doc(db, "contracts", contractId);
       const updateData = {
         vendor_name: editVendorName,
@@ -76,12 +92,16 @@ export default function ContractList({ contracts, selectedContract, onOpenContra
         paid_amount: Number(editPaidAmount),
         balance_due_date: editBalanceDueDate,
         manager_name: editManagerName,
-        manager_phone: editManagerPhone,
+        manager_phone: encryptedPhone,
         status: editStatus,
         memo: editMemo,
         details: editDetails,
         last_edited_by: uid,
         updated_at: serverTimestamp(),
+        partner_code: editPartnerCode.trim(),
+        partner_discount_per_count: Number(editPartnerDiscountPerCount),
+        partner_discount_count: Number(editPartnerDiscountCount),
+        partner_discount_total: Number(editPartnerDiscountTotal),
       };
 
       await updateDoc(contractRef, updateData).catch(err => 
@@ -201,10 +221,10 @@ export default function ContractList({ contracts, selectedContract, onOpenContra
           <span className="text-[10px] text-slate-400 mt-1">우측 하단의 [추가] 탭에서 계약서를 올려보세요.</span>
         </div>
       ) : (
-        <div id="contract-cards-grid" className="flex flex-col gap-3">
+        <div id="contract-cards-grid" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredContracts.map((contract) => {
             const theme = statusThemes[contract.status || "계약완료"];
-            const remaining = contract.total_amount - contract.paid_amount;
+            const remaining = Math.max(0, contract.total_amount - contract.paid_amount - (contract.partner_discount_total || 0));
             return (
               <motion.div
                 key={contract.id}
@@ -270,17 +290,17 @@ export default function ContractList({ contracts, selectedContract, onOpenContra
               className="fixed inset-0 bg-black z-40"
             />
 
-            {/* Bottom Sheet container */}
+            {/* Bottom Sheet container (Becomes a luxurious right drawer sidebar on PC) */}
             <motion.div
               id="detail-bottom-sheet"
               initial={{ y: "100%" }}
               animate={{ y: 0 }}
               exit={{ y: "100%" }}
               transition={{ type: "spring", damping: 25, stiffness: 220 }}
-              className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[420px] bg-white rounded-t-3xl z-50 shadow-2xl overflow-y-auto max-h-[92vh] border-t border-slate-100 flex flex-col"
+              className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[420px] bg-white rounded-t-3xl z-50 shadow-2xl overflow-y-auto max-h-[92vh] border-t border-slate-100 flex flex-col md:bottom-0 md:top-0 md:right-0 md:left-auto md:translate-x-0 md:w-[480px] md:max-w-md md:rounded-t-none md:rounded-l-[32px] md:max-h-screen md:border-t-0 md:border-l md:border-slate-150"
             >
-              {/* Grab handle */}
-              <div className="w-12 h-1 bg-slate-200 rounded-full mx-auto my-3 flex-shrink-0" />
+              {/* Grab handle (Hidden on desktop) */}
+              <div className="w-12 h-1 bg-slate-200 rounded-full mx-auto my-3 flex-shrink-0 md:hidden" />
 
               {/* Header inside Bottom Sheet */}
               <div className="px-5 pb-3 flex justify-between items-center border-b border-slate-50 flex-shrink-0">
@@ -418,6 +438,93 @@ export default function ContractList({ contracts, selectedContract, onOpenContra
                       />
                     </div>
 
+                    {/* Partner code and discount calculator block inside edit mode */}
+                    <div className="bg-gradient-to-br from-[#FBEAF0]/30 to-[#FAEEDA]/20 border border-[#ED93B1]/20 rounded-2xl p-4 flex flex-col gap-3">
+                      <div className="flex items-center gap-1.5 text-xs font-black text-[#D4537E]">
+                        <span>💝 짝꿍코드 / 후기 할인 수정</span>
+                        <span className="text-[9px] font-semibold text-slate-400 bg-white/80 px-2 py-0.5 rounded-full">잔고 연계차감</span>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-35">
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-400 mb-1 block">추천/짝꿍 코드</label>
+                          <input
+                            type="text"
+                            placeholder="예: 260610민우"
+                            value={editPartnerCode}
+                            onChange={(e) => setEditPartnerCode(e.target.value)}
+                            className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl outline-none focus:border-[#D4537E] text-xs text-slate-700"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-400 mb-1 block">1회당 할인액 (원)</label>
+                          <input
+                            type="number"
+                            placeholder="0"
+                            value={editPartnerDiscountPerCount === 0 ? "" : editPartnerDiscountPerCount}
+                            onChange={(e) => {
+                              const per = Number(e.target.value);
+                              setEditPartnerDiscountPerCount(per);
+                              setEditPartnerDiscountTotal(per * editPartnerDiscountCount);
+                            }}
+                            className="w-full h-10 px-3 bg-white border border-slate-200 rounded-xl outline-none focus:border-[#D4537E] text-[#D4537E] text-xs font-semibold"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-400 mb-1 block">추천인 횟수 (회)</label>
+                          <div className="flex items-center">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const newCount = Math.max(0, editPartnerDiscountCount - 1);
+                                setEditPartnerDiscountCount(newCount);
+                                setEditPartnerDiscountTotal(editPartnerDiscountPerCount * newCount);
+                              }}
+                              className="w-9 h-10 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 rounded-l-xl font-bold flex items-center justify-center active:scale-95"
+                            >
+                              -
+                            </button>
+                            <input
+                              type="number"
+                              value={editPartnerDiscountCount}
+                              onChange={(e) => {
+                                const cnt = Number(e.target.value);
+                                setEditPartnerDiscountCount(cnt);
+                                setEditPartnerDiscountTotal(editPartnerDiscountPerCount * cnt);
+                              }}
+                              className="w-full h-10 text-center border-y border-slate-200 outline-none focus:border-[#D4537E] text-xs text-slate-800 font-bold"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const newCount = editPartnerDiscountCount + 1;
+                                setEditPartnerDiscountCount(newCount);
+                                setEditPartnerDiscountTotal(editPartnerDiscountPerCount * newCount);
+                              }}
+                              className="w-9 h-10 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 rounded-r-xl font-bold flex items-center justify-center active:scale-95"
+                            >
+                              +
+                            </button>
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-400 mb-1 block">총 할인액 (원)</label>
+                          <input
+                            type="number"
+                            placeholder="0"
+                            value={editPartnerDiscountTotal === 0 ? "" : editPartnerDiscountTotal}
+                            onChange={(e) => setEditPartnerDiscountTotal(Number(e.target.value))}
+                            className="w-full h-10 px-3 bg-white border border-[#ED93B1]/40 rounded-xl outline-none focus:border-[#D4537E] text-xs text-[#D4537E] font-bold"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
                     {/* 6. Manager info */}
                     <div className="grid grid-cols-2 gap-3">
                       <div>
@@ -545,10 +652,37 @@ export default function ContractList({ contracts, selectedContract, onOpenContra
                         <span className="text-slate-400">납부 완료금액</span>
                         <span className="text-slate-800 font-semibold">{formatWon(selectedContract.paid_amount)}</span>
                       </div>
+                      
+                      {selectedContract.partner_discount_total ? (
+                        <div className="flex justify-between items-center text-xs text-[#D4537E]">
+                          <span className="text-[#D4537E]/85 font-extrabold flex items-center gap-1">
+                            💝 짝꿍코드 및 후기 할인
+                            {selectedContract.partner_code && (
+                              <span className="text-[9px] bg-white border border-pink-100 px-1.5 py-0.5 rounded-lg text-[#D4537E] font-medium font-mono">
+                                {selectedContract.partner_code}
+                              </span>
+                            )}
+                          </span>
+                          <span className="font-extrabold">
+                            -{formatWon(selectedContract.partner_discount_total)}
+                            {selectedContract.partner_discount_count ? ` (${selectedContract.partner_discount_count}회)` : ""}
+                          </span>
+                        </div>
+                      ) : selectedContract.partner_code ? (
+                        <div className="flex justify-between items-center text-xs text-slate-500">
+                          <span className="text-slate-400 font-bold flex items-center gap-1">
+                            💝 등록된 짝꿍코드
+                          </span>
+                          <span className="font-bold text-slate-700 bg-white border border-slate-200 px-2.5 py-0.5 rounded-lg font-mono">
+                            {selectedContract.partner_code}
+                          </span>
+                        </div>
+                      ) : null}
+
                       <div className="flex justify-between items-center border-t border-slate-100 pt-2.5 mt-0.5">
                         <span className="text-xs font-bold text-[#D4537E]">납부 대기 잔금</span>
                         <span className="text-base font-extrabold text-[#D4537E]">
-                          {formatWon(selectedContract.total_amount - selectedContract.paid_amount)}
+                          {formatWon(Math.max(0, selectedContract.total_amount - selectedContract.paid_amount - (selectedContract.partner_discount_total || 0)))}
                         </span>
                       </div>
                       {selectedContract.balance_due_date && (
@@ -577,28 +711,45 @@ export default function ContractList({ contracts, selectedContract, onOpenContra
                       </div>
                     </div>
 
-                    {/* Vendor Manager Info */}
-                    {(selectedContract.manager_name || selectedContract.manager_phone) && (
-                      <div className="bg-white border border-slate-50 p-3.5 rounded-2xl flex justify-between items-center">
-                        <div className="flex items-center gap-2.5">
-                          <UserCircle className="w-5 h-5 text-slate-400" />
-                          <div>
-                            <span className="text-[10px] text-slate-400 block font-semibold leading-none mb-0.5">계약 담당자</span>
-                            <span className="text-xs font-bold text-slate-700">
-                              {selectedContract.manager_name || "담당 실장 / 본사"}
-                            </span>
+                    {/* Vendor Manager Info with Decryption */}
+                    {(() => {
+                      const pwd = localStorage.getItem("wedding_vault_pwd") || "";
+                      const decryptedPhone = selectedContract.manager_phone 
+                        ? decryptText(selectedContract.manager_phone, pwd)
+                        : "";
+                      
+                      const hasManager = !!selectedContract.manager_name;
+                      const hasPhone = !!decryptedPhone;
+                      
+                      if (!hasManager && !hasPhone) return null;
+                      
+                      return (
+                        <div className="bg-white border border-slate-50 p-3.5 rounded-2xl flex justify-between items-center">
+                          <div className="flex items-center gap-2.5">
+                            <UserCircle className="w-5 h-5 text-slate-400" />
+                            <div>
+                              <span className="text-[10px] text-slate-400 block font-semibold leading-none mb-0.5">계약 담당자</span>
+                              <span className="text-xs font-bold text-slate-700 block">
+                                {selectedContract.manager_name || "담당 실장 / 본사"}
+                              </span>
+                              {decryptedPhone && (
+                                <span className="text-[10px] text-[#D4537E] font-extrabold tracking-tight mt-0.5 flex items-center gap-1">
+                                  <span>🔒 {decryptedPhone}</span>
+                                </span>
+                              )}
+                            </div>
                           </div>
+                          {decryptedPhone && (
+                            <a
+                              href={`tel:${decryptedPhone}`}
+                              className="bg-[#FBEAF0] text-[#D4537E] p-2.5 rounded-xl hover:bg-[#F3D1DE] active:scale-95 transition-all flex items-center justify-center"
+                            >
+                              <Phone className="w-4 h-4" />
+                            </a>
+                          )}
                         </div>
-                        {selectedContract.manager_phone && (
-                          <a
-                            href={`tel:${selectedContract.manager_phone}`}
-                            className="bg-[#FBEAF0] text-[#D4537E] p-2.5 rounded-xl hover:bg-[#F3D1DE] active:scale-95 transition-all flex items-center justify-center"
-                          >
-                            <Phone className="w-4 h-4" />
-                          </a>
-                        )}
-                      </div>
-                    )}
+                      );
+                    })()}
 
                     {/* Details checklist table */}
                     <div>
